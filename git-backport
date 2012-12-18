@@ -1,6 +1,6 @@
 #!/bin/bash
-USAGE='backport [{mantisissue}[,{mantisissue}]* | --continue | --abort]'
-LONG_USAGE="Gebruik het commando om mantisissue's te backporten, bij het falen van een merge fix de merge issue en doe 'git backport --continue'"
+USAGE='backport [{hash}[,{hash}]* | --continue]'
+LONG_USAGE="Gebruik het commando om hashes te backporten, bij het falen van een merge fix de merge issue en doe 'git backport --continue {overgeleven hashes}'"
 . git-sh-setup
 
 require_work_tree_exists
@@ -22,23 +22,27 @@ git pull
 echo Cobra fetchen
 git fetch git@github.com:topicusonderwijs/cobra.git
   
-ISSUES=$(echo $1|tr "," "\n")
-for ISSUE in $ISSUES; do
-	echo "Issue $ISSUE:"
-	echo "EduArte wijzigingen:"
-	while read ROW
-	do
-		echo $ROW
-		HASH=$(echo $ROW|cut -d" " -f2)
-		echo git cherry-pick $HASH
-	done < <(git log --oneline --cherry-mark --reverse $CURBRANCH..origin/master --grep $ISSUE)
-	echo "Cobra wijzigingen:"
-	while read ROW
-	do
-		echo $ROW
-		HASH=$(echo $ROW|cut -d" " -f2)
-		echo git cherry-pick --strategy=subtree $HASH
-	done < <(git log --oneline --cherry-mark --reverse ..FETCH_HEAD --grep $ISSUE)
+STATUS=0
+HASHES=$(echo $1|tr "," "\n")
+REMAINING=""
+for HASH in $HASHES; do
+	if [ $STATUS -eq 0 ]; then
+		echo "$HASH:"
+		LOG=$(git log --oneline -1 $HASH)
+		git cherry-pick $HASH
+		STATUS=$?
+	else
+		if [ -z "$REMAINING" ]; then
+			REMAINING=$HASH
+		else
+			REMAINING="$REMAINING,$HASH"
+		fi
+	fi
 done
 
-echo Nu met de hand een 'git push' doen indien gewenst
+if [ -z "$REMAINING" ]; then
+	echo Nu met de hand een 'git push' doen indien gewenst
+else
+	echo Er is iets mis gegaan, fix het probleem en ga verder door het uitvoeren van
+	echo -e "\tgit backport $REMAINING"
+fi
