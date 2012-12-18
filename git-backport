@@ -1,0 +1,44 @@
+#!/bin/bash
+USAGE='backport [{mantisissue}[,{mantisissue}]* | --continue | --abort]'
+LONG_USAGE="Gebruik het commando om mantisissue's te backporten, bij het falen van een merge fix de merge issue en doe 'git backport --continue'"
+. git-sh-setup
+
+require_work_tree_exists
+
+if [ $# -eq 0 ]; then
+	usage
+fi
+
+cd_to_toplevel
+
+CURBRANCH=$(git rev-parse --abbrev-ref HEAD)
+if [ "$CURBRANCH" = "master" ]; then
+	echo "Voer backport uit op de branch waar je naartoe wilt backporten, niet op master."
+	exit 1
+fi
+
+echo EduArte pullen
+git pull
+echo Cobra fetchen
+git fetch git@github.com:topicusonderwijs/cobra.git
+  
+ISSUES=$(echo $1|tr "," "\n")
+for ISSUE in $ISSUES; do
+	echo "Issue $ISSUE:"
+	echo "EduArte wijzigingen:"
+	while read ROW
+	do
+		echo $ROW
+		HASH=$(echo $ROW|cut -d" " -f2)
+		echo git cherry-pick $HASH
+	done < <(git log --oneline --cherry-mark --reverse $CURBRANCH..origin/master --grep $ISSUE)
+	echo "Cobra wijzigingen:"
+	while read ROW
+	do
+		echo $ROW
+		HASH=$(echo $ROW|cut -d" " -f2)
+		echo git cherry-pick --strategy=subtree $HASH
+	done < <(git log --oneline --cherry-mark --reverse ..FETCH_HEAD --grep $ISSUE)
+done
+
+echo Nu met de hand een 'git push' doen indien gewenst
